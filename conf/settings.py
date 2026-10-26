@@ -176,3 +176,18 @@ MEDIA_ROOT = BASE_DIR, 'media'
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 CORS_ALLOW_ALL_ORIGINS = True
+
+
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+# Keshda ma'lumot saqlanish vaqti (masalan, 15 daqiqa)
+CACHE_TTL = 60 * 15

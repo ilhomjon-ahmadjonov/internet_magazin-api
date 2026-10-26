@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status,generics
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.core.cache import cache
 
 from .models import Cart, CartItem,Order, OrderItem
 from .serializer import CartSerializer, CartAddSerializer, CartRemoveSerializer,OrderSerializer, CheckoutSerializer
@@ -14,9 +15,10 @@ class CartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        cart, _ = Cart.objects.get_or_create(user=request.user)
-        serializer = CartSerializer(cart)
-        return Response(serializer.data)
+        # Redis'dan foydalanuvchi savatini o'qimiz
+        cart_key = f"cart_{request.user.id}"
+        cart_data = cache.get(cart_key) or {}
+        return Response(cart_data)
 
 
 class CartAddView(APIView):
@@ -26,21 +28,29 @@ class CartAddView(APIView):
         serializer = CartAddSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        product_id = serializer.validated_data['product_id']
+        product_id = str(serializer.validated_data['product_id'])
         quantity = serializer.validated_data['quantity']
 
-        cart, _ = Cart.objects.get_or_create(user=request.user)
+        # Mahsulot bazada borligini tekshiramiz
         product = get_object_or_404(Product, id=product_id)
 
-        cart_item, created = CartItem.objects.get_or_create(
-            cart=cart, product=product,
-            defaults={'count': quantity}
-        )
-        if not created:
-            cart_item.count += quantity
-            cart_item.save()
+        cart_key = f"cart_{request.user.id}"
+        cart = cache.get(cart_key) or {"items": {}}
 
-        return Response(CartSerializer(cart).data, status=status.HTTP_201_CREATED)
+        # Savatda bo'lsa miqdorini qo'shamiz, bo'lmasa yangidan qo'shamiz
+        if product_id in cart["items"]:
+            cart["items"][product_id]["quantity"] += quantity
+        else:
+            cart["items"][product_id] = {
+                "product_id": product.id,
+                "name": product.name,
+                "price": str(product.price),
+                "quantity": quantity
+            }
+
+        # Redis'ga saqlaymiz (masalan, 2 кун муддатга)
+        cache.set(cart_key, cart, timeout=60 * 60 * 48)
+        return Response(cart, status=status.HTTP_201_CREATED)
 
 
 class CartRemoveView(APIView):
@@ -49,15 +59,19 @@ class CartRemoveView(APIView):
     def post(self, request):
         serializer = CartRemoveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        product_id = serializer.validated_data['product_id']
+        product_id = str(serializer.validated_data['product_id'])
 
-        cart = get_object_or_404(Cart, user=request.user)
-        deleted, _ = CartItem.objects.filter(cart=cart, product_id=product_id).delete()
+        cart_key = f"cart_{request.user.id}"
+        cart = cache.get(cart_key)
 
-        if deleted == 0:
+        if not cart or "items" not in cart or product_id not in cart["items"]:
             return Response({'detail': "Bu mahsulot savatda topilmadi"}, status=404)
 
-        return Response(CartSerializer(cart).data, status=status.HTTP_200_OK)
+        # Mahsulotni savatdan o'chiramiz
+        del cart["items"][product_id]
+        cache.set(cart_key, cart, timeout=60 * 60 * 48)
+
+        return Response(cart, status=status.HTTP_200_OK)
 
 
 

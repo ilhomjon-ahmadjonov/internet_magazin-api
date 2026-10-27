@@ -16,7 +16,9 @@ Django REST Framework va Redis asosida qurilgan elektron tijorat (E-commerce) va
 
 ## 🛠 1. O'rnatish va Ishga Tushirish (Docker orqali)
 
-1. Repozitoriyani klon qilib oling:
-   ```bash
-   git clone [https://github.com/ilhomjon-ahmadjonov/internet_magazin-api.git](https://github.com/ilhomjon-ahmadjonov/internet_magazin-api.git)
-   cd internet_magazin-api
+# Repozitoriyani klon qilib olish
+git clone https://github.com/ilhomjon-ahmadjonov/internet_magazin-api.git
+cd internet_magazin-api
+
+# Konteynerlarni build qilish va ishga tushirish (Barcha bog'liqliklar va migratsiyalar avtomatik bajariladi)
+docker-compose up --build
